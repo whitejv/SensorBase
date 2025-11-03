@@ -103,28 +103,6 @@
 #define PIN_JTAG_TCK GPIO_NUM_14  // GPIO14 - JTAG Clock
 #define PIN_JTAG_TMS GPIO_NUM_15  // GPIO15 - JTAG Mode Select (shared with red LED!)
 
-// ============================================================================
-// Legacy Sensor Pin Definitions (for compatibility)
-// Note: These use the corrected digital pin definitions
-// ============================================================================
-#define FLOWSENSOR    PIN_D7    // Flow sensor interrupt pin (GPIO7)
-#define TEMPSENSOR    PIN_D8    // One-wire temperature sensor (GPIO8)
-#define DISCINPUT1    PIN_D9    // Discrete input 1 (GPIO9, shared with NeoPixel/Boot)
-#define DISCINPUT2    PIN_D10   // Discrete input 2 (GPIO10, shared with SPI CS)
-#define CONFIGPIN1    PIN_D11   // Configuration pin 1 (GPIO11)
-#define CONFIGPIN2    PIN_D12   // Configuration pin 2 (GPIO12, shared with JTAG TDI)
-#define CONFIGPIN3    PIN_D13   // Configuration pin 3 (GPIO13, shared with JTAG TDO)
-
-// ============================================================================
-// I2C Device Addresses (from original design)
-// ============================================================================
-#define GPIO_EXPANDER_ADDR  0x20  // MCP23x17 GPIO expander
-#define ADS1115_ADDR        0x48  // 16-bit ADC
-#define ADS1015_ADDR        0x49  // 12-bit ADC
-#define BME280_ADDR         0x77  // Atmospheric sensor (also 0x76)
-#define RTC_ADDR            0x69  // RV1805 RTC
-#define OPENLOG_ADDR        0x2A  // OpenLog datalogger
-#define BUZZER_ADDR         0x34  // Qwiic Buzzer
 
 // ============================================================================
 // Pin Function Validation Macros
