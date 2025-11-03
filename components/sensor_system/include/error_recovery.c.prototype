@@ -1,0 +1,162 @@
+/*
+ * error_recovery.c - Error Recovery System Implementation Prototype
+ *
+ * This is a PROTOTYPE implementation showing the design approach.
+ * DO NOT COMPILE - This file is for design review only.
+ *
+ * Implementation Notes:
+ * - Centralized error tracking with history
+ * - Automatic recovery based on registered strategies
+ * - Escalation system for repeated errors
+ * - Integration with watchdog for fatal errors
+ * - Recovery callback support for custom logic
+ */
+
+/* PSEUDO-CODE IMPLEMENTATION OUTLINE */
+
+// Static variables
+static bool error_recovery_initialized = false;
+static ErrorRecord_t error_history[ERROR_HISTORY_SIZE];
+static uint32_t error_history_count = 0;
+static uint32_t error_history_index = 0;
+static RecoveryStrategy_t strategies[MAX_RECOVERY_STRATEGIES];
+static uint32_t num_strategies = 0;
+static ErrorRecoveryStats_t stats = {0};
+static SystemState_t current_system_state = SYSTEM_STATE_RUNNING;
+static TaskHandle_t error_recovery_task_handle = NULL;
+static esp_err_t (*recovery_callback)(ErrorCode_t, RecoveryAction_t, const char*) = NULL;
+
+// Default recovery strategies (initialized in error_recovery_init)
+static const RecoveryStrategy_t default_strategies[] = {
+    // I2C timeout - retry with device reset
+    {ERROR_I2C_TIMEOUT, ERROR_SEVERITY_ERROR, RECOVERY_ACTION_RESET_DEVICE, 
+     3, 100, 5, true},
+    
+    // I2C NACK - sensor not found, disable
+    {ERROR_I2C_NACK, ERROR_SEVERITY_WARNING, RECOVERY_ACTION_DISABLE,
+     1, 0, 10, true},
+    
+    // Sensor not found - disable after retries
+    {ERROR_SENSOR_NOT_FOUND, ERROR_SEVERITY_WARNING, RECOVERY_ACTION_DISABLE,
+     2, 500, 3, true},
+    
+    // Buffer overflow - critical, may need restart
+    {ERROR_BUFFER_OVERFLOW, ERROR_SEVERITY_CRITICAL, RECOVERY_ACTION_REINIT,
+     2, 1000, 2, true},
+    
+    // Memory allocation - critical, may need task restart
+    {ERROR_MEMORY_ALLOCATION, ERROR_SEVERITY_CRITICAL, RECOVERY_ACTION_RESTART_TASK,
+     2, 2000, 2, true},
+    
+    // Task creation failure - fatal
+    {ERROR_TASK_CREATION, ERROR_SEVERITY_FATAL, RECOVERY_ACTION_SOFT_RESTART,
+     0, 0, 1, true},
+    
+    // Queue full - warning, increase buffer or disable
+    {ERROR_QUEUE_FULL, ERROR_SEVERITY_WARNING, RECOVERY_ACTION_RETRY,
+     5, 100, 10, true}
+};
+
+esp_err_t error_recovery_init(void) {
+    // 1. Register default recovery strategies
+    // 2. Initialize error history array
+    // 3. Set initialized flag
+    // 4. Reset statistics
+    // 5. Set system state to SYSTEM_STATE_INIT
+    // 6. Return ESP_OK
+}
+
+BaseType_t error_recovery_start_task(void) {
+    // 1. Create error recovery monitoring task
+    // 2. Priority: TASK_PRIORITY_FIXED_FREQ (medium priority)
+    // 3. Stack size: TASK_STACK_SIZE_BACKGROUND
+    // 4. Task function: vErrorRecoveryTask()
+    // 5. Store task handle
+    // 6. Return pdPASS/pdFAIL
+}
+
+void vErrorRecoveryTask(void *pvParameters) {
+    // Main error recovery monitoring task:
+    // 1. Infinite loop:
+    //    a. Check error history for threshold violations
+    //    b. Evaluate escalation conditions
+    //    c. Trigger recovery actions if needed
+    //    d. Update system state based on error conditions
+    //    e. Log error statistics periodically
+    //    f. Delay for monitoring interval (5 seconds)
+}
+
+esp_err_t error_report(ErrorCode_t error_code,
+                        ErrorSeverity_t severity,
+                        const char* context,
+                        void* additional_data) {
+    // 1. Find or create error record in history
+    // 2. Update error record:
+    //    - Increment occurrence_count
+    //    - Update timestamp
+    //    - Store context
+    //    - Update statistics
+    // 3. Find recovery strategy for this error code
+    // 4. If strategy exists and auto_recover enabled:
+    //    a. Check if max_retries exceeded
+    //    b. Call error_recovery_attempt()
+    // 5. Log error with appropriate level
+    // 6. If severity is FATAL or CRITICAL:
+    //    a. Update system state to SYSTEM_STATE_ERROR
+    //    b. Trigger appropriate restart action
+    // 7. Return ESP_OK
+}
+
+esp_err_t error_recovery_attempt(ErrorCode_t error_code, const char* context) {
+    // 1. Find recovery strategy for error code
+    // 2. Check if max retries exceeded
+    // 3. If callback function set:
+    //    - Call callback first
+    //    - If callback returns ESP_OK, skip default action
+    // 4. Execute recovery action based on strategy.action:
+    //    - RECOVERY_ACTION_RETRY: Wait and return (caller retries)
+    //    - RECOVERY_ACTION_RESET_DEVICE: Reinitialize I2C/SPI device
+    //    - RECOVERY_ACTION_REINIT: Reinitialize subsystem
+    //    - RECOVERY_ACTION_DISABLE: Mark component as disabled
+    //    - RECOVERY_ACTION_RESTART_TASK: Restart specific task
+    //    - RECOVERY_ACTION_SOFT_RESTART: Call esp_restart()
+    //    - RECOVERY_ACTION_HARD_RESTART: Stop feeding watchdog
+    // 5. Update recovery statistics
+    // 6. Log recovery attempt
+    // 7. Return ESP_OK if successful
+}
+
+bool error_recovery_threshold_exceeded(ErrorCode_t error_code) {
+    // 1. Find error record for this code
+    // 2. Find recovery strategy
+    // 3. Compare occurrence_count to escalation_threshold
+    // 4. Return true if threshold exceeded
+}
+
+SystemState_t error_recovery_get_system_state(void) {
+    // 1. Evaluate current error conditions
+    // 2. Return appropriate system state:
+    //    - SYSTEM_STATE_RUNNING: No critical errors
+    //    - SYSTEM_STATE_ERROR: Errors present but recoverable
+    //    - SYSTEM_STATE_RECOVERY: Recovery in progress
+    //    - SYSTEM_STATE_SHUTDOWN: Fatal errors, shutting down
+}
+
+void error_recovery_force_restart(const char* reason, ErrorSeverity_t severity) {
+    // 1. Log restart reason
+    // 2. Update statistics
+    // 3. Based on severity:
+    //    - ERROR_SEVERITY_CRITICAL: esp_restart() (soft restart)
+    //    - ERROR_SEVERITY_FATAL: Stop feeding watchdog (hard restart)
+    // 4. Set system state to SYSTEM_STATE_SHUTDOWN
+}
+
+// Integration points:
+// - Call error_recovery_init() early in app_main()
+// - Call error_recovery_start_task() after initialization
+// - Tasks report errors with error_report() instead of ESP_LOG directly
+// - Sensor drivers call error_report() on I2C failures, timeouts, etc.
+// - System monitor can query error_recovery_get_system_state()
+// - Watchdog can query error recovery system before taking action
+// - Custom recovery logic via recovery callback for specialized handling
+
