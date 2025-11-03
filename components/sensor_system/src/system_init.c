@@ -23,6 +23,8 @@
 #include "config.h"
 #include "types.h"
 #include "pins.h"
+#include "watchdog.h"
+#include "error_recovery.h"
 
 static const char *TAG = "SYSTEM_INIT";
 
@@ -39,6 +41,9 @@ TaskHandle_t xSystemMonitorTaskHandle = NULL;
 void vHeartbeatTask(void *pvParameters) {
     (void)pvParameters;  // Unused parameter
 
+    // Register with watchdog
+    watchdog_register_current_task("Heartbeat", 6000);
+
     // Initialize onboard LED
     gpio_config_t led_config = {
         .pin_bit_mask = (1ULL << PIN_ONBOARD_LED),
@@ -52,8 +57,6 @@ void vHeartbeatTask(void *pvParameters) {
     // Start with LED off
     ESP_ERROR_CHECK(gpio_set_level(PIN_ONBOARD_LED, 0));
 
-    ESP_LOGI(TAG, "Heartbeat: Task started, FreeRTOS is running!");
-
     const TickType_t xDelay = pdMS_TO_TICKS(5000);  // 5 second delay
     static bool led_state = false;  // Track LED state
 
@@ -62,15 +65,8 @@ void vHeartbeatTask(void *pvParameters) {
         led_state = !led_state;
         ESP_ERROR_CHECK(gpio_set_level(PIN_ONBOARD_LED, led_state ? 1 : 0));
 
-        // Print heartbeat message with uptime
-        ESP_LOGI(TAG, "Heartbeat: System running, uptime: %lu seconds, LED: %s",
-                 (xTaskGetTickCount() * portTICK_PERIOD_MS) / 1000,
-                 led_state ? "ON" : "OFF");
-
-        // Print FreeRTOS task status
-        ESP_LOGI(TAG, "Heartbeat: FreeRTOS tasks: %d, heap free: %zu bytes",
-                 uxTaskGetNumberOfTasks(),
-                 esp_get_free_heap_size());
+        // Send heartbeat to watchdog
+        watchdog_task_heartbeat();
 
         vTaskDelay(xDelay);
     }
@@ -123,6 +119,9 @@ void vSystemInfoTask(void *pvParameters) {
  */
 void vSystemMonitorTask(void *pvParameters) {
     (void)pvParameters;  // Unused parameter
+
+    // Register with watchdog
+    watchdog_register_current_task("SysMonitor", MONITOR_INTERVAL_MS + 1000);
 
     ESP_LOGI(TAG, "System Monitor Task: Started successfully!");
 
@@ -184,6 +183,33 @@ void vSystemMonitorTask(void *pvParameters) {
             ESP_LOGD(TAG, "Heap change: %ld bytes", heapChange);
             lastHeapFree = currentHeapFree;
         }
+
+        // Get system state from error recovery
+        SystemState_t state = error_recovery_get_system_state();
+        if (state != SYSTEM_STATE_RUNNING) {
+            ESP_LOGW(TAG, "System state: %d", state);
+        }
+
+        // Get error statistics
+        ErrorRecoveryStats_t error_stats;
+        error_recovery_get_stats(&error_stats);
+        if (error_stats.total_errors > 0) {
+            ESP_LOGI(TAG, "Errors: total=%lu, recovered=%lu, critical=%lu",
+                     error_stats.total_errors,
+                     error_stats.recovered_errors,
+                     error_stats.critical_errors);
+        }
+
+        // Get watchdog statistics
+        WatchdogStats_t wdt_stats;
+        watchdog_get_stats(&wdt_stats);
+        ESP_LOGI(TAG, "Watchdog: feeds=%lu, timeouts=%lu, tasks=%lu",
+                 wdt_stats.totalFeeds,
+                 wdt_stats.timeoutCount,
+                 wdt_stats.tasksMonitored);
+
+        // Send heartbeat to watchdog
+        watchdog_task_heartbeat();
 
         ESP_LOGI(TAG, "--- Monitor Complete ---");
 

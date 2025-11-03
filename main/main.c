@@ -7,6 +7,8 @@
 #include "config.h"         // From sensor_system component
 #include "types.h"          // From sensor_system component
 #include "system_init.h"    // From sensor_system component
+#include "watchdog.h"       // From sensor_system component
+#include "error_recovery.h" // From sensor_system component
 
 static const char *TAG = "MAIN";
 
@@ -16,11 +18,47 @@ void app_main(void) {
     esp_log_level_set(TAG, ESP_LOG_DEBUG); // Set specific tag level
 
     ESP_LOGI(TAG, "======================================");
-    ESP_LOGI(TAG, "=== GenericSensor ESP-IDF Starting ===");
+    ESP_LOGI(TAG, "===  Sensor Base ESP-IDF Starting  ===");
     ESP_LOGI(TAG, "======================================");
 
-    // Create the system information task (runs once to display system info)
-    // Give it higher priority temporarily to ensure it runs first
+    // 1. Initialize error recovery FIRST (needed for error handling)
+    esp_err_t ret = error_recovery_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize error recovery: %s", esp_err_to_name(ret));
+        abort();
+    }
+
+    ret = error_recovery_start_task();
+    if (ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to start error recovery task");
+        abort();
+    }
+
+    // 2. Initialize watchdog timer
+    ret = watchdog_init(WATCHDOG_TIMEOUT_SEC);
+    if (ret != ESP_OK) {
+        error_report(ERROR_TASK_CREATION, ERROR_SEVERITY_CRITICAL, "app_main", NULL);
+        ESP_LOGE(TAG, "Failed to initialize watchdog: %s", esp_err_to_name(ret));
+        abort();
+    }
+
+    ret = watchdog_start_task();
+    if (ret != pdPASS) {
+        error_report(ERROR_TASK_CREATION, ERROR_SEVERITY_CRITICAL, "app_main", NULL);
+        ESP_LOGE(TAG, "Failed to start watchdog task");
+        abort();
+    }
+
+    // ============================================================================
+    // HARDWARE DEBUGGER SUPPORT: Uncomment the following to disable watchdog
+    // when using a hardware debugger. The watchdog will trigger if execution
+    // is paused (e.g., breakpoints), so disable it during debugging sessions.
+    // ============================================================================
+    // watchdog_disable();
+    // ESP_LOGW(TAG, "WATCHDOG DISABLED FOR DEBUGGING - DO NOT USE IN PRODUCTION!");
+    // ============================================================================
+
+    // 3. Create the system information task
     BaseType_t xResult = xTaskCreate(
         vSystemInfoTask,              // Task function
         "SystemInfo",                 // Task name
@@ -33,10 +71,11 @@ void app_main(void) {
     if (xResult == pdPASS) {
         ESP_LOGI(TAG, "System information task created successfully");
     } else {
+        error_report(ERROR_TASK_CREATION, ERROR_SEVERITY_ERROR, "app_main", NULL);
         ESP_LOGW(TAG, "WARNING: Failed to create system information task");
     }
 
-    // Create the system monitoring task (runs continuously)
+    // 4. Create the system monitoring task
     xResult = xTaskCreate(
         vSystemMonitorTask,           // Task function
         "SysMonitor",                 // Task name
@@ -48,13 +87,15 @@ void app_main(void) {
 
     if (xResult == pdPASS) {
         ESP_LOGI(TAG, "System monitoring task created successfully");
+        // Register with watchdog after creation
+        watchdog_register_task(xSystemMonitorTaskHandle, "SysMonitor", MONITOR_INTERVAL_MS + 1000);
     } else {
+        error_report(ERROR_TASK_CREATION, ERROR_SEVERITY_FATAL, "app_main", NULL);
         ESP_LOGE(TAG, "ERROR: Failed to create system monitoring task!");
-        // Critical error - halt system
         abort();
     }
 
-    // Create the heartbeat task (LED blink and status)
+    // 5. Create the heartbeat task
     xResult = xTaskCreate(
         vHeartbeatTask,               // Task function
         "Heartbeat",                  // Task name
@@ -66,7 +107,10 @@ void app_main(void) {
 
     if (xResult == pdPASS) {
         ESP_LOGI(TAG, "Heartbeat task created successfully");
+        // Register with watchdog after creation
+        watchdog_register_task(xHeartbeatTaskHandle, "Heartbeat", 6000);
     } else {
+        error_report(ERROR_TASK_CREATION, ERROR_SEVERITY_WARNING, "app_main", NULL);
         ESP_LOGW(TAG, "WARNING: Failed to create heartbeat task");
     }
 
